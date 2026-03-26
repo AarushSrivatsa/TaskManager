@@ -59,7 +59,7 @@ class CreateTaskSchema(BaseModel):
     @field_validator("deadline")
     def validate_deadline(cls, v):
         if v < datetime.now(tz=timezone.utc):
-            raise ValueError("Deadline cannot be in the past")
+            raise HTTPException("Deadline cannot be in the past")
         return v
 
 class UpdateTaskSchema(BaseModel):
