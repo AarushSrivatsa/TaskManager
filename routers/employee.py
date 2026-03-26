@@ -4,12 +4,13 @@ from sqlalchemy import select, func
 from uuid import UUID
 from database.initialization import get_db
 from database.models import EmployeeModel, TeamModel, TaskModel, EmployeeRefreshTokenModel
-from security.tokens import create_tokens, get_user_from_access_token, hash_refresh_token
+from security.tokens import create_tokens, get_current_employee, hash_refresh_token
 from security.passwords import hash_password, verify_password
 from pydantic import BaseModel, EmailStr, field_validator
 from datetime import datetime, timezone
 from typing import Optional
 from math import ceil
+
 
 router = APIRouter(prefix="/api/v1/employee", tags=["Employee"])
 
@@ -115,7 +116,7 @@ async def refresh(body: RefreshTokenSchema, db: AsyncSession = Depends(get_db)):
 async def logout(
     body: RefreshTokenSchema,
     db: AsyncSession = Depends(get_db),
-    employee: EmployeeModel = Depends(get_user_from_access_token)
+    employee: EmployeeModel = Depends(get_current_employee)
 ):
     token_hash = hash_refresh_token(body.refresh_token)
 
@@ -138,7 +139,7 @@ async def logout(
 async def change_password(
     body: ChangePasswordSchema,
     db: AsyncSession = Depends(get_db),
-    employee: EmployeeModel = Depends(get_user_from_access_token)
+    employee: EmployeeModel = Depends(get_current_employee)
 ):
     if not verify_password(employee.hashed_password, body.old_password):
         raise HTTPException(status_code=401, detail="Old password is incorrect")
@@ -154,7 +155,7 @@ async def change_password(
 async def join_team(
     body: JoinTeamSchema,
     db: AsyncSession = Depends(get_db),
-    employee: EmployeeModel = Depends(get_user_from_access_token)
+    employee: EmployeeModel = Depends(get_current_employee)
 ):
     if employee.team_id:
         raise HTTPException(status_code=400, detail="You are already in a team, exit first")
@@ -172,7 +173,7 @@ async def join_team(
 @router.post("/team/exit", summary="Exit current team")
 async def exit_team(
     db: AsyncSession = Depends(get_db),
-    employee: EmployeeModel = Depends(get_user_from_access_token)
+    employee: EmployeeModel = Depends(get_current_employee)
 ):
     if not employee.team_id:
         raise HTTPException(status_code=400, detail="You are not in a team")
@@ -199,7 +200,7 @@ async def get_tasks(
     limit: int = Query(10, ge=1, le=100),
     status: Optional[str] = Query(None, description="Filter by status: pending, in_progress, completed"),
     db: AsyncSession = Depends(get_db),
-    employee: EmployeeModel = Depends(get_user_from_access_token)
+    employee: EmployeeModel = Depends(get_current_employee)
 ):
     if not employee.team_id:
         raise HTTPException(status_code=400, detail="You are not in a team")
@@ -244,7 +245,7 @@ async def update_task_status(
     task_id: UUID,
     body: UpdateTaskStatusSchema,
     db: AsyncSession = Depends(get_db),
-    employee: EmployeeModel = Depends(get_user_from_access_token)
+    employee: EmployeeModel = Depends(get_current_employee)
 ):
     if not employee.team_id:
         raise HTTPException(status_code=400, detail="You are not in a team")

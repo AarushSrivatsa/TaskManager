@@ -1,4 +1,5 @@
 from datetime import datetime, timezone, timedelta
+from typing import Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from uuid import UUID
@@ -78,4 +79,18 @@ async def get_user_from_access_token(
     if not user:
         raise HTTPException(status_code=401, detail="User not found")
 
+    return user
+
+async def get_current_employee(
+    user = Depends(get_user_from_access_token)
+):
+    if not isinstance(user, EmployeeModel):
+        raise HTTPException(status_code=403, detail="Access forbidden: employees only")
+    return user
+
+async def get_current_manager(
+    user = Depends(get_user_from_access_token)
+):
+    if not isinstance(user, ManagerModel):
+        raise HTTPException(status_code=403, detail="Access forbidden: managers only")
     return user

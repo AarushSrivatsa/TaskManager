@@ -6,7 +6,7 @@ from sqlalchemy import select, func
 from uuid import UUID
 from database.initialization import get_db
 from database.models import ManagerModel, EmployeeModel, TeamModel, TaskModel, ManagerRefreshTokenModel
-from security.tokens import create_tokens, get_user_from_access_token, hash_refresh_token
+from security.tokens import create_tokens, get_current_manager, hash_refresh_token
 from security.passwords import hash_password, verify_password
 from pydantic import BaseModel, EmailStr, field_validator
 from datetime import datetime, timezone
@@ -89,10 +89,12 @@ async def register(body: RegisterSchema, db: AsyncSession = Depends(get_db)):
         hashed_password=hash_password(body.password)
     )
     db.add(manager)
-    await db.commit()
-    await db.refresh(manager)
+    await db.flush(manager)
 
     tokens = await create_tokens(manager.id, role="manager", db=db)
+
+    await db.commit()
+
     return {"manager_id": manager.id, **tokens}
 
 
@@ -136,7 +138,7 @@ async def refresh(body: RefreshTokenSchema, db: AsyncSession = Depends(get_db)):
 async def logout(
     body: RefreshTokenSchema,
     db: AsyncSession = Depends(get_db),
-    manager: ManagerModel = Depends(get_user_from_access_token)
+    manager: ManagerModel = Depends(get_current_manager)
 ):
     token_hash = hash_refresh_token(body.refresh_token)
 
@@ -159,7 +161,7 @@ async def logout(
 async def change_password(
     body: ChangePasswordSchema,
     db: AsyncSession = Depends(get_db),
-    manager: ManagerModel = Depends(get_user_from_access_token)
+    manager: ManagerModel = Depends(get_current_manager)
 ):
     if not verify_password(manager.hashed_password, body.old_password):
         raise HTTPException(status_code=401, detail="Old password is incorrect")
@@ -174,7 +176,7 @@ async def change_password(
 @router.post("/team", summary="Create a team")
 async def create_team(
     db: AsyncSession = Depends(get_db),
-    manager: ManagerModel = Depends(get_user_from_access_token)
+    manager: ManagerModel = Depends(get_current_manager)
 ):
     result = await db.execute(select(TeamModel).where(TeamModel.manager_id == manager.id))
     if result.scalar_one_or_none():
@@ -190,7 +192,7 @@ async def create_team(
 @router.get("/team", summary="Get your team details and UUID")
 async def get_team(
     db: AsyncSession = Depends(get_db),
-    manager: ManagerModel = Depends(get_user_from_access_token)
+    manager: ManagerModel = Depends(get_current_manager)
 ):
     result = await db.execute(select(TeamModel).where(TeamModel.manager_id == manager.id))
     team = result.scalar_one_or_none()
@@ -205,7 +207,7 @@ async def get_members(
     page: int = Query(1, ge=1),
     limit: int = Query(10, ge=1, le=100),
     db: AsyncSession = Depends(get_db),
-    manager: ManagerModel = Depends(get_user_from_access_token)
+    manager: ManagerModel = Depends(get_current_manager)
 ):
     result = await db.execute(select(TeamModel).where(TeamModel.manager_id == manager.id))
     team = result.scalar_one_or_none()
@@ -238,7 +240,7 @@ async def get_members(
 async def remove_member(
     employee_id: UUID,
     db: AsyncSession = Depends(get_db),
-    manager: ManagerModel = Depends(get_user_from_access_token)
+    manager: ManagerModel = Depends(get_current_manager)
 ):
     result = await db.execute(select(TeamModel).where(TeamModel.manager_id == manager.id))
     team = result.scalar_one_or_none()
@@ -264,7 +266,8 @@ async def remove_member(
     )
     tasks = task_result.scalars().all()
     for task in tasks:
-        task.employee_id = None
+        if task.status != "completed":
+            task.employee_id = None
 
     employee.team_id = None
     await db.commit()
@@ -277,7 +280,7 @@ async def remove_member(
 async def create_task(
     body: CreateTaskSchema,
     db: AsyncSession = Depends(get_db),
-    manager: ManagerModel = Depends(get_user_from_access_token)
+    manager: ManagerModel = Depends(get_current_manager)
 ):
     result = await db.execute(select(TeamModel).where(TeamModel.manager_id == manager.id))
     team = result.scalar_one_or_none()
@@ -316,7 +319,7 @@ async def get_tasks(
     status: Optional[str] = Query(None, description="Filter by status: pending, in_progress, completed"),
     employee_id: Optional[UUID] = Query(None, description="Filter by assigned employee"),
     db: AsyncSession = Depends(get_db),
-    manager: ManagerModel = Depends(get_user_from_access_token)
+    manager: ManagerModel = Depends(get_current_manager)
 ):
     result = await db.execute(select(TeamModel).where(TeamModel.manager_id == manager.id))
     team = result.scalar_one_or_none()
@@ -367,7 +370,7 @@ async def update_task(
     task_id: UUID,
     body: UpdateTaskSchema,
     db: AsyncSession = Depends(get_db),
-    manager: ManagerModel = Depends(get_user_from_access_token)
+    manager: ManagerModel = Depends(get_current_manager)
 ):
     result = await db.execute(select(TeamModel).where(TeamModel.manager_id == manager.id))
     team = result.scalar_one_or_none()
@@ -414,7 +417,7 @@ async def update_task(
 async def delete_task(
     task_id: UUID,
     db: AsyncSession = Depends(get_db),
-    manager: ManagerModel = Depends(get_user_from_access_token)
+    manager: ManagerModel = Depends(get_current_manager)
 ):
     result = await db.execute(select(TeamModel).where(TeamModel.manager_id == manager.id))
     team = result.scalar_one_or_none()
@@ -437,7 +440,7 @@ async def delete_task(
 @router.get("/dashboard", summary="Get team task stats")
 async def dashboard(
     db: AsyncSession = Depends(get_db),
-    manager: ManagerModel = Depends(get_user_from_access_token)
+    manager: ManagerModel = Depends(get_current_manager)
 ):
     result = await db.execute(select(TeamModel).where(TeamModel.manager_id == manager.id))
     team = result.scalar_one_or_none()
