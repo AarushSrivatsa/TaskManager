@@ -27,13 +27,13 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.mount("/static", StaticFiles(directory="static"), name="static")
+app.mount("/frontend", StaticFiles(directory="frontend"), name="frontend")
 
 @app.get("/")
 async def root():
-    return RedirectResponse("/static/index.html")
+    return RedirectResponse("/frontend/index.html")
 
-router_list = [employee_router,manager_router]
+router_list = [employee_router, manager_router]
 
 for router in router_list:
     app.include_router(router)

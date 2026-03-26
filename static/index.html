@@ -170,9 +170,7 @@
   .form-section { display: none; }
   .form-section.active { display: block; }
 
-  .field {
-    margin-bottom: 16px;
-  }
+  .field { margin-bottom: 16px; }
 
   label {
     display: block;
@@ -275,22 +273,6 @@
   .alert.error { background: rgba(255,106,142,0.1); border: 1px solid rgba(255,106,142,0.3); color: var(--error); }
   .alert.success { background: rgba(74,222,128,0.1); border: 1px solid rgba(74,222,128,0.3); color: var(--success); }
   .alert.show { display: block; }
-
-  .divider {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    margin: 20px 0;
-    color: var(--muted);
-    font-size: 11px;
-    letter-spacing: 1px;
-  }
-  .divider::before, .divider::after {
-    content: '';
-    flex: 1;
-    height: 1px;
-    background: var(--border);
-  }
 </style>
 </head>
 <body>
@@ -387,15 +369,14 @@
     document.getElementById(`${prefix}-spinner`).style.display = loading ? 'block' : 'none';
   }
 
-  function parseRole(token) {
-    try {
-      return JSON.parse(atob(token.split('.')[1])).role;
-    } catch { return null; }
+  function parseToken(token) {
+    try { return JSON.parse(atob(token.split('.')[1])); } catch { return null; }
   }
 
-  function saveTokens(data) {
+  function saveTokens(data, email) {
     localStorage.setItem('access_token', data.access_token);
     localStorage.setItem('refresh_token', data.refresh_token);
+    localStorage.setItem('user_email', email);
   }
 
   async function handleLogin() {
@@ -406,8 +387,6 @@
     setLoading('login', true);
     hideAlert();
 
-    // Try employee first, then manager
-    let data = null;
     let res = await fetch(`${API}/api/v1/employee/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -429,10 +408,10 @@
       return showAlert(err.detail || 'Invalid credentials.', 'error');
     }
 
-    data = await res.json();
-    saveTokens(data);
-    const role = parseRole(data.access_token);
-    window.location.href = role === 'manager' ? '/static/manager.html' : '/static/employee.html';
+    const data = await res.json();
+    saveTokens(data, email);
+    const payload = parseToken(data.access_token);
+    window.location.href = payload.role === 'manager' ? '/frontend/manager.html' : '/frontend/employee.html';
   }
 
   async function handleRegister() {
@@ -458,11 +437,10 @@
     }
 
     const data = await res.json();
-    saveTokens(data);
-    window.location.href = selectedRole === 'manager' ? '/static/manager.html' : '/static/employee.html';
+    saveTokens(data, email);
+    window.location.href = selectedRole === 'manager' ? '/frontend/manager.html' : '/frontend/employee.html';
   }
 
-  // Enter key support
   document.addEventListener('keydown', e => {
     if (e.key !== 'Enter') return;
     if (document.getElementById('login-section').classList.contains('active')) handleLogin();
