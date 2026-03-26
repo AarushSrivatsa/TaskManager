@@ -89,7 +89,7 @@ async def register(body: RegisterSchema, db: AsyncSession = Depends(get_db)):
         hashed_password=hash_password(body.password)
     )
     db.add(manager)
-    await db.flush(manager)
+    await db.flush()
 
     tokens = await create_tokens(manager.id, role="manager", db=db)
 
